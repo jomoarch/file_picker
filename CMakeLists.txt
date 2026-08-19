@@ -10,7 +10,9 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 if(MSVC)
-  add_compile_options(/W3)
+  # /utf-8：源码含 UTF-8 字面量（状态栏箭头等），MSVC 默认按系统 ANSI
+  # 代码页解码源码，会导致字符串损坏；/utf-8 使源与执行字符集均为 UTF-8
+  add_compile_options(/W3 /utf-8)
 else()
   add_compile_options(-Wall -Wextra)
 endif()

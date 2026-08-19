@@ -10,7 +10,7 @@ namespace fp {
 
 namespace {
 
-const char *kSep = "\xE2\x94\x82"; // "│" U+2502，显示宽度 1
+const char *kSep = "|";
 
 // 在 styled 文本后补空格到指定宽度（宽度按 plain 的显示宽度计算）
 std::string padded(const std::string &styled, const std::string &plain,
@@ -37,11 +37,11 @@ std::string entry_cell(const Listing &L, int row, const PickerState &st,
   bool sel = st.is_selected(e.path);
   bool can = st.selectable(e);
 
-  // 前缀：仅左栏当前目录带 "▶ " 标记；后缀：目录 "/"、符号链接 "@"
-  std::string prefix = is_current_dir ? "\xE2\x96\xB6 " : "";
+  // 前缀：仅左栏当前目录带 "> " 标记；后缀：目录 "/"、符号链接 "@"
+  std::string prefix = is_current_dir ? "> " : "";
   std::string suffix = e.is_dir ? "/" : (e.is_link ? "@" : "");
   int name_budget =
-      width - static_cast<int>(prefix.size()) - static_cast<int>(suffix.size());
+      width - string_display_width(prefix) - string_display_width(suffix);
   if (name_budget < 0)
     name_budget = 0;
   std::string plain = prefix + truncate_to_width(e.name, name_budget) + suffix;
@@ -83,7 +83,7 @@ std::string title_cell(const std::string &plain, int width) {
   return padded("\033[34;4m" + p + "\033[0m", p, width);
 }
 
-// 三栏宽度分配：左右各约 30%，中栏取剩余；过窄时收缩左右栏
+// 三栏宽度分配：左右各约 20%，中栏取剩余；过窄时收缩左右栏
 void compute_widths(int cols, int &side, int &mid) {
   side = cols * 2 / 10;
   if (side < 6)
@@ -152,7 +152,7 @@ std::string build_titles(const PickerState &st, int side, int mid) {
   if (ce)
     t_right = ce->name + (ce->is_dir ? "/" : (ce->is_link ? "@" : ""));
   else
-    t_right = "—";
+    t_right = "-";
 
   return title_cell(t_left, side) + kSep + title_cell(t_mid, mid) + kSep +
          title_cell(t_right, side);
@@ -190,28 +190,29 @@ std::string Renderer::render(PickerState &st, Size size,
 
   std::string out;
   out.reserve(static_cast<size_t>(rows) * (static_cast<size_t>(cols) + 16));
-  out += "\033[H";
+  // 逐行用 CSI 显式定位到 (row,1) 后再写入，而不是“写满整行 + \r\n”
+  // Windows conhost 在整行恰好写满终端宽度时会按 ENABLE_WRAP_AT_EOL_OUTPUT
+  // 立即折行，随后的 \r\n 会被吞掉或再换一行，导致整帧错乱（“exact wrap”问题）
+  // 显式定位与折行语义无关，Linux / Windows 行为完全一致
+  auto line_at = [&out](int row, const std::string &line) {
+    out += "\033[" + std::to_string(row) + ";1H";
+    out += line;
+  };
 
-  out += build_header(st, cols);
-  out += "\r\n";
-  out += build_titles(st, side, mid);
-  out += "\r\n";
+  line_at(1, build_header(st, cols));
+  line_at(2, build_titles(st, side, mid));
 
   for (int i = 0; i < entry_rows; ++i) {
-    out += col_cell(st.parent_listing(), i, st, side, false, true);
-    out += kSep;
-    out += col_cell(st.current_listing(), i, st, mid, true, false);
-    out += kSep;
-    out += col_cell(st.right_listing(), i, st, side, false, false);
-    if (i + 1 < entry_rows)
-      out += "\r\n";
+    line_at(3 + i,
+            col_cell(st.parent_listing(), i, st, side, false, true) + kSep +
+                col_cell(st.current_listing(), i, st, mid, true, false) + kSep +
+                col_cell(st.right_listing(), i, st, side, false, false));
   }
-  out += "\r\n";
-  out += build_status(status_left, status_right, cols);
-  out += "\r\n";
+  line_at(3 + entry_rows, build_status(status_left, status_right, cols));
   std::string cur_path = path_to_utf8(st.current_dir());
   std::string path_plain = truncate_to_width(cur_path, cols);
-  out += padded("\033[2m" + path_plain + "\033[0m", path_plain, cols);
+  line_at(4 + entry_rows,
+          padded("\033[2m" + path_plain + "\033[0m", path_plain, cols));
   return out;
 }
 
@@ -228,20 +229,21 @@ std::string Renderer::render_help(const std::vector<std::string> &lines,
 
   std::string out;
   out.reserve(static_cast<size_t>(rows) * (static_cast<size_t>(cols) + 16));
-  out += "\033[H";
+  // 与 render() 相同：显式逐行定位，避免 conhost 对写满整行后的 \r\n 处理不一致
+  auto line_at = [&out](int row, const std::string &line) {
+    out += "\033[" + std::to_string(row) + ";1H";
+    out += line;
+  };
 
   std::string title = "HELP  -  H/q/Esc: close,  j/k/Up/Down: scroll";
-  out += padded("\033[1;7m" + title + "\033[0m", title, cols);
-  out += "\r\n";
+  line_at(1, padded("\033[1;7m" + title + "\033[0m", title, cols));
 
   for (int i = 0; i < body_rows; ++i) {
     size_t li = static_cast<size_t>(scroll) + static_cast<size_t>(i);
     std::string line;
     if (li < lines.size())
       line = truncate_to_width(lines[li], cols);
-    out += padded(line, line, cols);
-    if (i + 1 < body_rows)
-      out += "\r\n";
+    line_at(2 + i, padded(line, line, cols));
   }
 
   std::string footer;
@@ -252,8 +254,7 @@ std::string Renderer::render_help(const std::vector<std::string> &lines,
     footer = "Line " + std::to_string(scroll + 1) + "-" + std::to_string(last) +
              " / " + std::to_string(lines.size()) + "   press H to close";
   }
-  out += "\r\n";
-  out += padded("\033[7m" + footer + "\033[0m", footer, cols);
+  line_at(2 + body_rows, padded("\033[7m" + footer + "\033[0m", footer, cols));
   return out;
 }
 

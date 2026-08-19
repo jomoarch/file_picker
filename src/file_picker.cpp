@@ -89,8 +89,8 @@ SelectionResult pick_files(const SelectionOptions &user_opts) {
                             std::string &right) {
       left = pending
                  ? "Empty selection - press any key to continue"
-                 : "[q]Quit [c]Confirm [Space]Select [h/←]Up [l/→/Enter]Open "
-                   "[j/k/↑/↓]Move [.]Hidden [H]Help";
+                 : "[q]Quit [c]Confirm [Space]Select [h/Left]Up "
+                   "[l/Right/Enter]Open [j/k/Up/Down]Move [.]Hidden [H]Help";
       right = "Mode:" + state.mode_name() +
               " Sel:" + std::to_string(state.selection_count()) +
               " Hide:" + (state.show_hidden() ? "on" : "off");

@@ -132,8 +132,8 @@ std::string truncate_to_width(const std::string &s, int width) {
 }
 
 std::string truncate_keep_tail(const std::string &utf8, int width) {
-  if (width <= 1)
-    return "\xE2\x80\xA6"; // "…"
+  if (width <= 3)
+    return std::string(static_cast<size_t>(width > 0 ? width : 0), '.');
   if (string_display_width(utf8) <= width)
     return utf8;
   std::string tail;
@@ -153,13 +153,13 @@ std::string truncate_keep_tail(const std::string &utf8, int width) {
       continue;
     }
     int cw = display_width(cp);
-    if (w + cw > width - 1)
+    if (w + cw > width - 3)
       break;
     w += cw;
     tail.insert(0, utf8, start, consumed);
     pos = start;
   }
-  return "\xE2\x80\xA6" + tail;
+  return "..." + tail;
 }
 
 std::string path_to_utf8(const std::filesystem::path &p) {

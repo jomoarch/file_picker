@@ -1,6 +1,11 @@
 // Vendored wcwidth：基于 Markus Kuhn 的公共领域 wcwidth.c
 // （http://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c，Unicode 5.x 区间表）
 // 改编：参数由 wchar_t 改为 uint32_t 码点，移除 locale 依赖，跨平台行为一致
+//
+// 注意：东亚宽（East Asian Ambiguous, EAW=A）字符（如 │ ▶ — … ← → ↑ ↓）
+// 在 Linux 终端通常占 1 列，在部分 Windows 字体下占 2 列，本表统一按 1 列
+// 处理。因此布局代码（renderer 等）必须避免使用 EAW=A 字符，改用宽度确定
+// 的 ASCII；文件名等外部内容若含这类字符，实际宽度仍可能与个别终端不一致。
 
 #include "wcwidth.hpp"
 

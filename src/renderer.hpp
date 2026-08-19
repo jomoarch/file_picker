@@ -15,7 +15,7 @@ class PickerState;
 // 布局：顶栏(模式/当前目录路径/选中数) / 列标题 / 三栏条目区 / 底部状态栏
 class Renderer {
 public:
-  // 返回完整帧（以 \033[H 开头，末尾无换行）
+  // 返回完整帧（每行以 CSI 光标定位 \033[row;1H 开头，末尾无换行）
   // 为底部状态栏文本
   std::string render(PickerState &state, Size size,
                      const std::string &status_left,
