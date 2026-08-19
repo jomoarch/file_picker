@@ -75,6 +75,8 @@ SelectionResult pick_files(const SelectionOptions &user_opts) {
             "  l / Right / Enter      open directory",
             "  j / Down, k / Up       move cursor",
             "  .                  toggle hidden files",
+            "  u                  refresh cache (rescan current dir & its "
+            "path)",
             "  H                  toggle help",
         };
         return;
@@ -87,10 +89,11 @@ SelectionResult pick_files(const SelectionOptions &user_opts) {
 
     auto build_status = [&](bool pending, std::string &left,
                             std::string &right) {
-      left = pending
-                 ? "Empty selection - press any key to continue"
-                 : "[q]Quit [c]Confirm [Space]Select [h/Left]Up "
-                   "[l/Right/Enter]Open [j/k/Up/Down]Move [.]Hidden [H]Help";
+      left =
+          pending
+              ? "Empty selection - press any key to continue"
+              : "[q]Quit [c]Confirm [H]Help [Space]Select [h/Left]Up "
+                "[l/Right/Enter]Open [j/k/Up/Down]Move [.]Hidden [u]Refresh ";
       right = "Mode:" + state.mode_name() +
               " Sel:" + std::to_string(state.selection_count()) +
               " Hide:" + (state.show_hidden() ? "on" : "off");
@@ -186,6 +189,10 @@ SelectionResult pick_files(const SelectionOptions &user_opts) {
           break;
         case '.':
           state.toggle_hidden();
+          break;
+        case 'u':
+          state
+              .refresh_cache(); // 刷新缓存：当前目录及其路径上所有目录立即重扫入缓存
           break;
         default:
           break;

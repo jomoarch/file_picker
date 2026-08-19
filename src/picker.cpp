@@ -112,7 +112,6 @@ void PickerState::seed_ancestors(const std::filesystem::path &start) {
 }
 
 void PickerState::refresh_cache() {
-  // 静态假设的失效出口（将来绑定 "u" 键）：目录内容可能已变化
   // 清空目录缓存与光标记忆后重建；当前目录的光标位置尽量保留
   size_t keep_cursor = cur_.cursor;
   std::string dk = path_key(cur_.dir);
@@ -125,11 +124,16 @@ void PickerState::refresh_cache() {
     m.full = std::min(keep_cursor,
                       cur_.entries.empty() ? 0 : cur_.entries.size() - 1);
     m.full_set = true;
+    cur_.cursor = m.full;
   } else {
     m.plain = std::min(keep_cursor,
                        cur_.entries.empty() ? 0 : cur_.entries.size() - 1);
     m.plain_set = true;
+    cur_.cursor = m.plain;
   }
+  // rebuild 时光标还是 0，右栏按第一个条目构建；光标恢复后再重建右栏，
+  // 保证右栏内容与光标所指目录一致（右栏标题按光标渲染，内容不能对不上）
+  relist_right();
 }
 void PickerState::move_cursor(int delta) {
   if (cur_.entries.empty())
@@ -223,7 +227,6 @@ void PickerState::toggle_hidden() {
 
   opts_.show_hidden = !opts_.show_hidden;
   relist_cur_and_parent();
-  relist_right();
 
   CursorMem &mem = cursor_mem_[dk];
   if (opts_.show_hidden) {
@@ -261,6 +264,9 @@ void PickerState::toggle_hidden() {
     mem.plain = cur_.cursor;
     mem.plain_set = true;
   }
+  // 光标确定后再重建右栏：relist 时 restore_cursor 用的是新视图的旧偏移，
+  // 与切换逻辑算出的最终光标可能不同，右栏必须按最终光标构建
+  relist_right();
   cur_.scroll = 0;
 }
 
