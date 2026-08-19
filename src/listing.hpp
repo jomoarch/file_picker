@@ -28,6 +28,10 @@ struct Listing {
 
 Listing scan_directory(const std::filesystem::path &dir, bool show_hidden);
 
+// 条目排序比较器：目录（含指向目录的链接）总在文件（含指向文件的链接）前
+// 同类内按名称字典序。scan_directory 排序与 PickerState 定位条目共用
+bool entry_sorted_before(const Entry &a, const Entry &b);
+
 } // namespace fp
 
 #endif // FILE_PICKER_LISTING_HPP

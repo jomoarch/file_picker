@@ -11,15 +11,31 @@
 
 namespace fp {
 
-// 目录级 Listing 缓存条目：保存扫描结果与目录 mtime
-// 命中时用 last_write_time 做轻量新鲜度校验，外部目录变化后自动失效
-struct ListingCacheEntry {
-  Listing listing;
-  std::filesystem::file_time_type mtime{};
+// 每个目录在两个隐藏视图下各自记住的光标偏移：
+//   plain —— 不隐藏视图（隐藏隐藏文件）下的偏移
+//   full  —— 隐藏视图（显示隐藏文件）下的偏移
+// plain_set / full_set 表示该视图的偏移是否已确定（未确定 = 该视图还没来过，
+// 首次进入时由 restore_cursor
+// 从另一视图记住的文件映射得出，避免跳到第一个条目）。 切换隐藏 ->
+// 不隐藏时若光标指向隐藏文件，会记 pending_full_restore；
+// 期间若无有效导航（上/下移动、进入），切回隐藏视图时恢复到 full 位置
+// （即原隐藏文件处），否则跟随当前光标文件
+struct CursorMem {
+  size_t plain = 0;
+  size_t full = 0;
+  bool plain_set = false;
+  bool full_set = false;
+  bool pending_full_restore = false;
 };
 
 // 交互选择器的核心状态机：与终端无关，可独立单元测试
 // 负责：目录导航、光标/滚动、选中集合维护、隐藏文件开关
+//
+// 静态缓存模型：程序只返回路径，假定遍历过的目录内容不再变化。
+// 因此目录 Listing 一经扫描即永久缓存（refresh_cache() 是唯一的失效出口，
+// 为将来 "u" 键刷新预留，当前未接线）；每个目录的光标偏移按
+// “来过直接查缓存、没来过初始化”处理：目录第一次来时初始化当前视图
+// 偏移，另一视图的偏移在它第一次被使用时，由已记住的文件映射得出。
 class PickerState {
 public:
   explicit PickerState(const SelectionOptions &opts);
@@ -29,6 +45,11 @@ public:
   void go_parent();            // 根目录时无操作
   bool enter_cursor();         // 进入光标所指目录；非目录/坏链接返回 false
   void toggle_hidden();        // 显示/隐藏隐藏文件
+
+  // ---- 缓存 ----
+  // 刷新钩子：清空目录缓存与光标记忆并重建（静态假设下目录不再变化，
+  // 目录内容确实改变时由调用方调用本方法；将来绑定到 "u" 键）
+  void refresh_cache();
 
   // ---- 选择 ----
   void toggle_cursor_selection(); // Space；不可选条目静默忽略
@@ -58,25 +79,28 @@ private:
   void relist_right(); // 右栏：光标条目的子目录（走通用目录缓存）
   void remember_cursor();
   void restore_cursor(const std::filesystem::path &dir);
+  void seed_ancestors(const std::filesystem::path &start);
   void clear_selection();
   bool is_single_mode() const;
   bool mode_allows_dir() const;
   bool mode_allows_file() const;
   static std::string path_key(const std::filesystem::path &p);
 
-  // 目录缓存：命中且目录 mtime 未变则取缓存，否则返回 false（调用方重新扫描）
-  // key = show_hidden 标记 + 规范化路径，三栏（当前/父/右）共用
-  bool load_listing(const std::filesystem::path &dir, Listing &out);
-  void store_listing(const std::filesystem::path &dir, const Listing &L);
+  // 静态目录缓存：key = show_hidden 标记 + 规范化路径。
+  // 假定目录不再变化，因此不做新鲜度校验；refresh_cache() 整体清空
+  bool load_listing(const std::filesystem::path &dir, bool show_hidden,
+                    Listing &out);
+  void store_listing(const std::filesystem::path &dir, bool show_hidden,
+                     const Listing &L);
 
   SelectionOptions opts_;
   Listing cur_, parent_, right_;
   std::unordered_set<std::string> sel_set_;
   std::vector<std::filesystem::path> sel_order_;
   std::unordered_map<std::string, size_t> sel_index_;
-  std::unordered_map<std::string, size_t> cursor_mem_; // 每个目录记住的光标
-  std::unordered_map<std::string, ListingCacheEntry>
-      listing_cache_; // 目录级 Listing 缓存（含 mtime 新鲜度校验）
+  std::unordered_map<std::string, CursorMem>
+      cursor_mem_; // 每目录两个视图的光标偏移
+  std::unordered_map<std::string, Listing> listing_cache_; // 静态目录缓存
   static constexpr size_t kListingCacheMax = 512;
 };
 

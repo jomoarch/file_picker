@@ -71,16 +71,16 @@ Listing scan_directory(const std::filesystem::path &dir, bool show_hidden) {
     out.entries.push_back(std::move(e));
   }
 
-  // 排序：目录总排在文件前
-  // 同类内按名称字典序
+  // 排序：目录（含目录链接）在前，同类内按名称字典序
   // （字节序比较对合法 UTF-8 等价于码点序，零解码开销）
-  std::sort(out.entries.begin(), out.entries.end(),
-            [](const Entry &a, const Entry &b) {
-              if (a.is_dir != b.is_dir)
-                return a.is_dir;
-              return a.name < b.name;
-            });
+  std::sort(out.entries.begin(), out.entries.end(), entry_sorted_before);
   return out;
+}
+
+bool entry_sorted_before(const Entry &a, const Entry &b) {
+  if (a.is_dir != b.is_dir)
+    return a.is_dir;
+  return a.name < b.name;
 }
 
 } // namespace fp
