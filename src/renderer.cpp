@@ -83,7 +83,7 @@ std::string title_cell(const std::string &plain, int width) {
 
 // 三栏宽度分配：左右各约 30%，中栏取剩余；过窄时收缩左右栏
 void compute_widths(int cols, int &side, int &mid) {
-  side = cols * 3 / 10;
+  side = cols * 2 / 10;
   if (side < 6)
     side = 6;
   mid = cols - 2 * side - 2;
@@ -158,6 +158,7 @@ std::string build_titles(const PickerState &st, int side, int mid) {
 
 std::string build_status(const std::string &left, const std::string &right,
                          int cols) {
+  --cols;
   std::string r = truncate_to_width(right, std::max(cols / 3, 4));
   int left_budget = cols - string_display_width(r);
   if (left_budget < 2)
