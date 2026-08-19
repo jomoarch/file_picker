@@ -106,7 +106,16 @@ void PickerState::go_parent() {
 
 bool PickerState::enter_cursor() {
   const Entry *e = current_entry();
-  if (!e || !e->is_dir)
+  if (!e)
+    return false;
+  bool is_dir = e->is_dir;
+  if (e->is_link) {
+    std::error_code ec;
+    is_dir = std::filesystem::is_directory(e->path, ec);
+    if (ec)
+      is_dir = false;
+  }
+  if (!is_dir)
     return false;
   cursor_mem_[path_key(cur_.dir)] = cur_.cursor;
   cur_.dir = e->path;
