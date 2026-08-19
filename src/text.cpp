@@ -180,4 +180,8 @@ std::filesystem::path path_from_utf8(const std::string &utf8) {
 #endif
 }
 
+std::string path_key_string(const std::filesystem::path &p) {
+  return path_to_utf8(p.lexically_normal());
+}
+
 } // namespace fp

@@ -45,6 +45,10 @@ std::string path_to_utf8(const std::filesystem::path &p);
 // 用 UTF-8 构造 path
 std::filesystem::path path_from_utf8(const std::string &utf8);
 
+// 路径的规范化 UTF-8 键：先去 . .. 冗余再转 UTF-8，
+// 供选中集合 / 目录缓存等哈希查找直接使用（避免每次查找重复构造）
+std::string path_key_string(const std::filesystem::path &p);
+
 } // namespace fp
 
 #endif // FILE_PICKER_TEXT_HPP

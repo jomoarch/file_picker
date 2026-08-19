@@ -49,6 +49,7 @@ Listing scan_directory(const std::filesystem::path &dir, bool show_hidden) {
     Entry e;
     e.path = de.path();
     e.name = name;
+    e.key = path_key_string(de.path());
 
     std::error_code ec2;
     std::filesystem::file_status ss = de.symlink_status(ec2);

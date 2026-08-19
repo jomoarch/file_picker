@@ -34,7 +34,7 @@ std::string entry_cell(const Listing &L, int row, const PickerState &st,
 
   bool is_current_dir = is_left && e.path == st.current_dir();
   bool is_cursor = is_middle && idx == L.cursor;
-  bool sel = st.is_selected(e.path);
+  bool sel = st.is_selected(e.key); // Entry::key 为扫描时预计算的键
   bool can = st.selectable(e);
 
   // 前缀：仅左栏当前目录带 "> " 标记；后缀：目录 "/"、符号链接 "@"

@@ -10,6 +10,8 @@ namespace fp {
 struct Entry {
   std::filesystem::path path;
   std::string name;
+  std::string key; // 预计算的规范化 UTF-8 键（path_key_string）
+                   // 供选中集合 / 目录缓存哈希直接使用，避免每帧重复构造
   bool is_dir = false;
   bool is_link = false;
 };

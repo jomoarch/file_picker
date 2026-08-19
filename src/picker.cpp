@@ -28,10 +28,15 @@ PickerState::PickerState(const SelectionOptions &opts) : opts_(opts) {
       fs::path par = child.parent_path();
       if (par.empty() || par == child)
         break;
-      Listing L = scan_directory(par, opts_.show_hidden);
+      Listing L;
+      if (!load_listing(par, L)) {
+        L = scan_directory(par, opts_.show_hidden);
+        store_listing(par, L);
+      }
       if (L.ok) {
+        std::string child_key = path_key(child);
         for (size_t i = 0; i < L.entries.size(); ++i) {
-          if (path_key(L.entries[i].path) == path_key(child)) {
+          if (L.entries[i].key == child_key) {
             cursor_mem_[path_key(par)] = i;
             break;
           }
@@ -49,6 +54,7 @@ PickerState::PickerState(const SelectionOptions &opts) : opts_(opts) {
 
     Entry e;
     e.path = ap;
+    e.key = path_key(ap);
     std::error_code e2, e3;
     e.is_link = fs::is_symlink(fs::symlink_status(ap, e2));
     if (e2)
@@ -112,7 +118,6 @@ bool PickerState::enter_cursor() {
 void PickerState::toggle_hidden() {
   opts_.show_hidden = !opts_.show_hidden;
   cursor_mem_[path_key(cur_.dir)] = cur_.cursor;
-  right_cache_.clear();
   relist_cur_and_parent();
   relist_right();
 }
@@ -122,7 +127,7 @@ void PickerState::toggle_cursor_selection() {
   if (!e || !selectable(*e))
     return;
 
-  std::string k = path_key(e->path);
+  std::string k = e->key;
   auto it = sel_set_.find(k);
   if (it != sel_set_.end()) {
     sel_set_.erase(it);
@@ -147,8 +152,8 @@ const Entry *PickerState::current_entry() const {
   return &cur_.entries[cur_.cursor];
 }
 
-bool PickerState::is_selected(const std::filesystem::path &p) const {
-  return sel_set_.count(path_key(p)) != 0;
+bool PickerState::is_selected(const std::string &key) const {
+  return sel_set_.count(key) != 0;
 }
 
 bool PickerState::selectable(const Entry &e) const {
@@ -204,7 +209,10 @@ void PickerState::rebuild_listings() {
 }
 
 void PickerState::relist_cur_and_parent() {
-  cur_ = scan_directory(cur_.dir, opts_.show_hidden);
+  if (!load_listing(cur_.dir, cur_)) {
+    cur_ = scan_directory(cur_.dir, opts_.show_hidden);
+    store_listing(cur_.dir, cur_);
+  }
   restore_cursor(cur_.dir);
   cur_.scroll = 0;
 
@@ -217,10 +225,14 @@ void PickerState::relist_cur_and_parent() {
     parent_.highlight = -1;
     parent_.scroll = 0;
   } else {
-    parent_ = scan_directory(par, opts_.show_hidden);
+    if (!load_listing(par, parent_)) {
+      parent_ = scan_directory(par, opts_.show_hidden);
+      store_listing(par, parent_);
+    }
     parent_.highlight = -1;
+    std::string cur_key = path_key(cur_.dir);
     for (size_t i = 0; i < parent_.entries.size(); ++i) {
-      if (parent_.entries[i].path == cur_.dir) {
+      if (parent_.entries[i].key == cur_key) {
         parent_.highlight = static_cast<int>(i);
         break;
       }
@@ -239,18 +251,44 @@ void PickerState::relist_right() {
     right_.scroll = 0;
     return;
   }
-  std::string ck = (opts_.show_hidden ? "1|" : "0|") + path_key(e->path);
-  auto it = right_cache_.find(ck);
-  if (it != right_cache_.end()) {
-    right_ = it->second;
-    right_.scroll = 0;
-    return;
+  if (!load_listing(e->path, right_)) {
+    right_ = scan_directory(e->path, opts_.show_hidden);
+    store_listing(e->path, right_);
   }
-  right_ = scan_directory(e->path, opts_.show_hidden);
   right_.scroll = 0;
-  if (right_cache_.size() >= kRightCacheMax)
-    right_cache_.clear();
-  right_cache_[ck] = right_;
+}
+
+bool PickerState::load_listing(const std::filesystem::path &dir, Listing &out) {
+  std::string k = (opts_.show_hidden ? "1|" : "0|") + path_key(dir);
+  auto it = listing_cache_.find(k);
+  if (it == listing_cache_.end())
+    return false;
+  // 轻量新鲜度校验：目录 mtime 未变则复用缓存，否则视为失效重扫
+  std::error_code ec;
+  std::filesystem::file_time_type mt =
+      std::filesystem::last_write_time(dir, ec);
+  if (ec || mt != it->second.mtime) {
+    listing_cache_.erase(it);
+    return false;
+  }
+  out = it->second.listing;
+  return true;
+}
+
+void PickerState::store_listing(const std::filesystem::path &dir,
+                                const Listing &L) {
+  if (!L.ok)
+    return; // 扫描失败的目录不缓存，下次仍重新扫描
+  std::string k = (opts_.show_hidden ? "1|" : "0|") + path_key(dir);
+  ListingCacheEntry e;
+  e.listing = L;
+  std::error_code ec;
+  e.mtime = std::filesystem::last_write_time(dir, ec);
+  if (ec)
+    e.mtime = std::filesystem::file_time_type::min(); // 无法 stat：永不命中
+  if (listing_cache_.size() >= kListingCacheMax)
+    listing_cache_.clear();
+  listing_cache_[k] = std::move(e);
 }
 
 void PickerState::remember_cursor() {
@@ -285,7 +323,7 @@ bool PickerState::mode_allows_file() const {
 }
 
 std::string PickerState::path_key(const std::filesystem::path &p) {
-  return path_to_utf8(p.lexically_normal());
+  return path_key_string(p);
 }
 
 } // namespace fp
