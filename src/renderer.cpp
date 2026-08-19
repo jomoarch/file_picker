@@ -37,9 +37,12 @@ std::string entry_cell(const Listing &L, int row, const PickerState &st,
   bool sel = st.is_selected(e.key); // Entry::key 为扫描时预计算的键
   bool can = st.selectable(e);
 
-  // 前缀：仅左栏当前目录带 "> " 标记；后缀：目录 "/"、符号链接 "@"
+  // 前缀：仅左栏当前目录带 "> " 标记；后缀：链接 "@"（目录链接再加 "/"）、
+  // 目录 "/"
   std::string prefix = is_current_dir ? "> " : "";
-  std::string suffix = e.is_dir ? "/" : (e.is_link ? "@" : "");
+  std::string suffix = e.is_link ? "@" : "";
+  if (e.is_dir)
+    suffix += "/";
   int name_budget =
       width - string_display_width(prefix) - string_display_width(suffix);
   if (name_budget < 0)
@@ -149,9 +152,12 @@ std::string build_titles(const PickerState &st, int side, int mid) {
 
   const Entry *ce = st.current_entry();
   std::string t_right;
-  if (ce)
-    t_right = ce->name + (ce->is_dir ? "/" : (ce->is_link ? "@" : ""));
-  else
+  if (ce) {
+    std::string sfx = ce->is_link ? "@" : "";
+    if (ce->is_dir)
+      sfx += "/";
+    t_right = ce->name + sfx;
+  } else
     t_right = "-";
 
   return title_cell(t_left, side) + kSep + title_cell(t_mid, mid) + kSep +
