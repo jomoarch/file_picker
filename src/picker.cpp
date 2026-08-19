@@ -22,6 +22,25 @@ PickerState::PickerState(const SelectionOptions &opts) : opts_(opts) {
   cur_.dir = opts_.initial_path;
   rebuild_listings();
 
+  {
+    fs::path child = opts_.initial_path;
+    while (true) {
+      fs::path par = child.parent_path();
+      if (par.empty() || par == child)
+        break;
+      Listing L = scan_directory(par, opts_.show_hidden);
+      if (L.ok) {
+        for (size_t i = 0; i < L.entries.size(); ++i) {
+          if (path_key(L.entries[i].path) == path_key(child)) {
+            cursor_mem_[path_key(par)] = i;
+            break;
+          }
+        }
+      }
+      child = par;
+    }
+  }
+
   for (const auto &p : opts_.initial_selection) {
     fs::path ap = fs::absolute(p, ec);
     if (ec)

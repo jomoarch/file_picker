@@ -76,9 +76,10 @@ std::string col_cell(const Listing &L, int row, const PickerState &st,
   return entry_cell(L, row, st, width, is_middle, is_left);
 }
 
+// 栏标题：蓝色字体 + 下划线（\033[34;4m），与下方目录条目区分
 std::string title_cell(const std::string &plain, int width) {
   std::string p = truncate_to_width(plain, width);
-  return padded("\033[1m" + p + "\033[0m", p, width);
+  return padded("\033[34;4m" + p + "\033[0m", p, width);
 }
 
 // 三栏宽度分配：左右各约 30%，中栏取剩余；过窄时收缩左右栏
@@ -180,7 +181,7 @@ std::string Renderer::render(PickerState &st, Size size,
   int rows = std::max(size.rows, 5);
   int side = 0, mid = 0;
   compute_widths(cols, side, mid);
-  int entry_rows = rows - 3;
+  int entry_rows = rows - 4;
   if (entry_rows < 1)
     entry_rows = 1;
 
@@ -206,6 +207,10 @@ std::string Renderer::render(PickerState &st, Size size,
   }
   out += "\r\n";
   out += build_status(status_left, status_right, cols);
+  out += "\r\n";
+  std::string cur_path = path_to_utf8(st.current_dir());
+  std::string path_plain = truncate_to_width(cur_path, cols);
+  out += padded("\033[2m" + path_plain + "\033[0m", path_plain, cols);
   return out;
 }
 
