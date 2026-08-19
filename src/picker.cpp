@@ -17,7 +17,10 @@ PickerState::PickerState(const SelectionOptions &opts) : opts_(opts) {
   fs::path abs = fs::absolute(opts_.initial_path, ec);
   if (ec)
     abs = opts_.initial_path;
-  opts_.initial_path = abs.lexically_normal();
+  abs = abs.lexically_normal();
+  if (abs != abs.root_path() && abs.filename().empty())
+    abs = abs.parent_path();
+  opts_.initial_path = abs;
 
   cur_.dir = opts_.initial_path;
   rebuild_listings();
@@ -51,6 +54,8 @@ PickerState::PickerState(const SelectionOptions &opts) : opts_(opts) {
     if (ec)
       ap = p;
     ap = ap.lexically_normal();
+    if (ap != ap.root_path() && ap.filename().empty())
+      ap = ap.parent_path();
 
     Entry e;
     e.path = ap;
