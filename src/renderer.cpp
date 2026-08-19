@@ -23,7 +23,8 @@ std::string padded(const std::string &styled, const std::string &plain,
 }
 
 // 条目单元格。is_middle：中栏（光标高亮）；is_left：左栏（当前目录高亮）
-// 选中标识：绿色背景（黑字）；光标/当前目录行：粗体反显，选中时绿色加粗。
+// 选中标识：绿色背景（黑字）；光标/当前目录行：粗体反显，选中时改用
+// 更浅更亮的亮绿色背景（\033[102m）。
 std::string entry_cell(const Listing &L, int row, const PickerState &st,
                        int width, bool is_middle, bool is_left) {
   size_t idx = L.scroll + static_cast<size_t>(row);
@@ -47,8 +48,8 @@ std::string entry_cell(const Listing &L, int row, const PickerState &st,
 
   std::string style;
   if (is_current_dir || is_cursor) {
-    style = sel ? "\033[1;30;42m"
-                : "\033[1;7m"; // 光标/当前目录：反显（选中时绿色加粗）
+    style = sel ? "\033[1;30;106m"
+                : "\033[1;7m"; // 光标/当前目录：反显（选中时亮绿色背景）
   } else if (sel) {
     style = "\033[30;42m"; // 已选中：黑字绿底
   } else if (!can) {
