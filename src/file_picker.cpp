@@ -145,6 +145,10 @@ SelectionResult pick_files(const SelectionOptions &user_opts) {
           ++help_scroll;
         } else if (ev.kind == KeyKind::Up) {
           --help_scroll;
+        } else if (ev.kind == KeyKind::WheelDown) {
+          ++help_scroll;
+        } else if (ev.kind == KeyKind::WheelUp) {
+          --help_scroll;
         }
         last_size = term.size();
         render_now(last_size);
@@ -214,6 +218,12 @@ SelectionResult pick_files(const SelectionOptions &user_opts) {
       case KeyKind::Left:
       case KeyKind::Backspace:
         state.go_parent();
+        break;
+      case KeyKind::WheelUp: // 鼠标滚轮上/下：移动光标
+        state.move_cursor(-1);
+        break;
+      case KeyKind::WheelDown:
+        state.move_cursor(1);
         break;
       case KeyKind::Esc: // 扩展：Esc 等价于取消
       case KeyKind::CtrlC:

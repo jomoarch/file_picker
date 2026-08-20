@@ -68,10 +68,10 @@ bool Terminal::init() {
   impl_->saved_in_cp = ::GetConsoleCP();
   impl_->saved_out_cp = ::GetConsoleOutputCP();
 
-  // 输入：关闭行缓冲/回显/进程信号处理/快速编辑模式
+  // 输入：关闭行缓冲/回显/进程信号处理/快速编辑模式，启用鼠标输入（滚轮）
   DWORD new_in = in_mode & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT |
                              ENABLE_PROCESSED_INPUT | ENABLE_QUICK_EDIT_MODE);
-  new_in |= ENABLE_EXTENDED_FLAGS;
+  new_in |= ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT;
   ::SetConsoleMode(impl_->h_in, new_in);
 
   // 输出：启用虚拟终端处理（ANSI 转义），并切到 UTF-8 代码页
@@ -141,8 +141,18 @@ KeyEvent Terminal::read_key(int timeout_ms) {
     if (!::ReadConsoleInputW(impl_->h_in, recs, 16, &n))
       return {KeyKind::None};
     for (DWORD i = 0; i < n; ++i) {
+      if (recs[i].EventType == MOUSE_EVENT) {
+        // 鼠标滚轮（dwButtonState 高 16 位为增量，±120）
+        const MOUSE_EVENT_RECORD &me = recs[i].Event.MouseEvent;
+        if (me.dwEventFlags & MOUSE_WHEELED) {
+          short delta = static_cast<short>(me.dwButtonState >> 16);
+          return delta > 0 ? KeyEvent{KeyKind::WheelUp}
+                           : KeyEvent{KeyKind::WheelDown};
+        }
+        continue;
+      }
       if (recs[i].EventType != KEY_EVENT)
-        continue; // 忽略窗口/鼠标事件
+        continue; // 忽略窗口事件
       const KEY_EVENT_RECORD &ke = recs[i].Event.KeyEvent;
       if (!ke.bKeyDown)
         continue;

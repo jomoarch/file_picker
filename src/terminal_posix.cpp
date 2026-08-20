@@ -23,10 +23,13 @@ struct Terminal::Impl {
   termios saved{}; // 原始终端属性（退出时恢复）
   bool raw_set = false;
   std::string pending_; // 尚未解析的输入字节缓冲
-  int esc_state = 0;    // 0=普通, 1=收到 ESC, 2=CSI 序列中, 3=SS3 序列中
+  // 0=普通, 1=收到 ESC, 2=CSI 序列中, 3=SS3 序列中 4=X10 鼠标序列中
+  int esc_state = 0;
   std::string csi_params;
   int utf8_need = 0;     // 尚缺的 UTF-8 续字节数
   std::string utf8_part; // 已收到的 UTF-8 前缀字节
+  int x10_need = 0;      // X10 鼠标：尚缺的字节数（ESC [ M 后 3 字节）
+  unsigned char x10_buf[3] = {0, 0, 0}; // X10 鼠标：已收字节
 };
 
 namespace {
@@ -95,6 +98,24 @@ KeyEvent parse_byte(Terminal::Impl *im, unsigned char b) {
       std::string params = im->csi_params;
       im->esc_state = 0;
       im->csi_params.clear();
+      // SGR 鼠标序列（\033[?1006h）：ESC [ < b ; x ; y M（按下）/ m（释放）
+      // 只响应按下（M），释放（m）忽略，否则一格滚轮会触发两次移动
+      if (fin == 'M' && !params.empty() && params[0] == '<') {
+        int btn = std::atoi(params.c_str() + 1);
+        if (btn == 64)
+          return {KeyKind::WheelUp};
+        if (btn == 65)
+          return {KeyKind::WheelDown};
+        return {KeyKind::Unknown}; // 鼠标点击/移动等其他事件忽略
+      }
+      if (fin == 'm' && !params.empty() && params[0] == '<')
+        return {KeyKind::None}; // SGR 鼠标释放事件忽略
+      // X10 鼠标序列（不支持 1006h 的终端）：ESC [ M 后跟 3 字节
+      if (fin == 'M' && params.empty()) {
+        im->esc_state = 4;
+        im->x10_need = 3;
+        return {KeyKind::None};
+      }
       int p1 = 1;
       size_t semi = params.find(';');
       std::string first = params.substr(0, semi);
@@ -159,6 +180,22 @@ KeyEvent parse_byte(Terminal::Impl *im, unsigned char b) {
       }
     }
     return {KeyKind::Unknown};
+  }
+
+  // X10 鼠标序列：ESC [ M + 3 字节（Cb, Cx, Cy；滚轮 Cb=96/97）
+  if (im->esc_state == 4) {
+    im->x10_buf[3 - im->x10_need] = b;
+    --im->x10_need;
+    if (im->x10_need == 0) {
+      im->esc_state = 0;
+      int btn = static_cast<int>(im->x10_buf[0]) - 32;
+      if (btn == 64)
+        return {KeyKind::WheelUp};
+      if (btn == 65)
+        return {KeyKind::WheelDown};
+      return {KeyKind::Unknown}; // 鼠标点击等其他事件忽略
+    }
+    return {KeyKind::None};
   }
 
   // 普通字节
@@ -237,8 +274,8 @@ bool Terminal::init() {
   for (int s : kSignals)
     ::sigaction(s, &sa, nullptr);
 
-  // 进入备用屏幕、隐藏光标、清屏
-  const char esc[] = "\033[?1049h\033[?25l\033[2J\033[H";
+  // 进入备用屏幕、隐藏光标、启用鼠标追踪（滚轮事件）、清屏
+  const char esc[] = "\033[?1049h\033[?25l\033[?1000h\033[?1006h\033[2J\033[H";
   write_all(STDOUT_FILENO, esc, sizeof(esc) - 1);
   inited_ = true;
   return true;
@@ -249,8 +286,8 @@ void Terminal::restore() {
     return;
   inited_ = false;
   if (impl_) {
-    // 重置属性、显示光标、退出备用屏幕
-    const char esc[] = "\033[0m\033[?25h\033[?1049l";
+    // 重置属性、显示光标、关闭鼠标追踪、退出备用屏幕
+    const char esc[] = "\033[0m\033[?25h\033[?1000l\033[?1006l\033[?1049l";
     write_all(STDOUT_FILENO, esc, sizeof(esc) - 1);
     if (impl_->raw_set) {
       ::tcsetattr(STDIN_FILENO, TCSANOW, &impl_->saved);
@@ -310,15 +347,18 @@ KeyEvent Terminal::read_key(int timeout_ms) {
   };
 
   for (;;) {
-    // 1) 从缓冲解析一个完整事件（每个字节都会被消费或进入中间状态）
-    for (size_t i = 0; i < impl_->pending_.size(); ++i) {
-      KeyEvent ev =
-          parse_byte(impl_, static_cast<unsigned char>(impl_->pending_[i]));
+    // 1) 从缓冲解析一个完整事件
+    size_t consumed = 0;
+    while (consumed < impl_->pending_.size()) {
+      KeyEvent ev = parse_byte(
+          impl_, static_cast<unsigned char>(impl_->pending_[consumed]));
+      ++consumed;
       if (ev.kind != KeyKind::None) {
-        impl_->pending_.erase(0, i + 1);
+        impl_->pending_.erase(0, consumed);
         return ev;
       }
     }
+    impl_->pending_.erase(0, consumed);
 
     // 2) 需要更多字节（缓冲为空，或处于未完成的 ESC/CSI/UTF-8 序列中）
     int wait_ms = remaining_ms();
@@ -326,6 +366,7 @@ KeyEvent Terminal::read_key(int timeout_ms) {
       if (impl_->esc_state != 0) {
         impl_->esc_state = 0;
         impl_->csi_params.clear();
+        impl_->x10_need = 0;
         return {KeyKind::Esc};
       }
       if (impl_->utf8_need > 0) {
@@ -341,6 +382,7 @@ KeyEvent Terminal::read_key(int timeout_ms) {
       if (impl_->esc_state != 0) {
         impl_->esc_state = 0;
         impl_->csi_params.clear();
+        impl_->x10_need = 0;
         return {KeyKind::Esc};
       }
       if (impl_->utf8_need > 0) {
