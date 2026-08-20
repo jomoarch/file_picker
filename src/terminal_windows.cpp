@@ -149,6 +149,12 @@ KeyEvent Terminal::read_key(int timeout_ms) {
           return delta > 0 ? KeyEvent{KeyKind::WheelUp}
                            : KeyEvent{KeyKind::WheelDown};
         }
+        // 左键按下（dwEventFlags==0 表示按下/释放；仅按下上报，带 1-based 坐标）
+        if (me.dwEventFlags == 0 &&
+            (me.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED)) {
+          return KeyEvent{KeyKind::MouseLeft, 0, me.dwMousePosition.X + 1,
+                          me.dwMousePosition.Y + 1};
+        }
         continue;
       }
       if (recs[i].EventType != KEY_EVENT)

@@ -161,6 +161,23 @@ void PickerState::move_cursor(int delta) {
   relist_right();
 }
 
+void PickerState::jump_cursor(size_t index) {
+  if (cur_.entries.empty())
+    return;
+  size_t clamped = std::min(index, cur_.entries.size() - 1);
+  CursorMem &mem = cursor_mem_[path_key(cur_.dir)];
+  if (opts_.show_hidden) {
+    mem.full = clamped;
+    mem.full_set = true;
+  } else {
+    mem.plain = clamped;
+    mem.plain_set = true;
+  }
+  mem.pending_full_restore = false; // 有效移动：取消“切回时恢复原隐藏位置”
+  cur_.cursor = clamped;
+  relist_right();
+}
+
 void PickerState::go_parent() {
   fs::path par = cur_.dir.parent_path();
   if (par.empty() || par == cur_.dir)

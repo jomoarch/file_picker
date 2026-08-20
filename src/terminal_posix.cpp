@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <cstdio>
 #include <string>
 
 namespace fp {
@@ -101,12 +102,15 @@ KeyEvent parse_byte(Terminal::Impl *im, unsigned char b) {
       // SGR 鼠标序列（\033[?1006h）：ESC [ < b ; x ; y M（按下）/ m（释放）
       // 只响应按下（M），释放（m）忽略，否则一格滚轮会触发两次移动
       if (fin == 'M' && !params.empty() && params[0] == '<') {
-        int btn = std::atoi(params.c_str() + 1);
-        if (btn == 64)
+        int b = 0, x = 0, y = 0;
+        std::sscanf(params.c_str() + 1, "%d;%d;%d", &b, &x, &y);
+        if (b == 64)
           return {KeyKind::WheelUp};
-        if (btn == 65)
+        if (b == 65)
           return {KeyKind::WheelDown};
-        return {KeyKind::Unknown}; // 鼠标点击/移动等其他事件忽略
+        if (b == 0)
+          return {KeyKind::MouseLeft, 0, x, y}; // 左键按下（带 1-based 坐标）
+        return {KeyKind::Unknown}; // 中键/右键/拖拽等其他鼠标事件忽略
       }
       if (fin == 'm' && !params.empty() && params[0] == '<')
         return {KeyKind::None}; // SGR 鼠标释放事件忽略
@@ -182,7 +186,7 @@ KeyEvent parse_byte(Terminal::Impl *im, unsigned char b) {
     return {KeyKind::Unknown};
   }
 
-  // X10 鼠标序列：ESC [ M + 3 字节（Cb, Cx, Cy；滚轮 Cb=96/97）
+  // X10 鼠标序列：ESC [ M + 3 字节（Cb, Cx, Cy；滚轮 Cb=96/97，左键 Cb=32）
   if (im->esc_state == 4) {
     im->x10_buf[3 - im->x10_need] = b;
     --im->x10_need;
@@ -193,7 +197,11 @@ KeyEvent parse_byte(Terminal::Impl *im, unsigned char b) {
         return {KeyKind::WheelUp};
       if (btn == 65)
         return {KeyKind::WheelDown};
-      return {KeyKind::Unknown}; // 鼠标点击等其他事件忽略
+      if (btn == 0)
+        return {KeyKind::MouseLeft, 0,
+                static_cast<int>(im->x10_buf[1]) - 32,
+                static_cast<int>(im->x10_buf[2]) - 32};
+      return {KeyKind::Unknown}; // 中键/右键等其他鼠标事件忽略
     }
     return {KeyKind::None};
   }

@@ -36,6 +36,7 @@ public:
 
   // ---- 导航 ----
   void move_cursor(int delta); // +1 下移 / -1 上移（边界处无操作）
+  void jump_cursor(size_t index); // 直接把光标跳到指定条目（鼠标点击定位，越界夹紧）
   void go_parent();            // 根目录时无操作
   bool enter_cursor();         // 进入光标所指目录；非目录/坏链接返回 false
   void toggle_hidden();        // 显示/隐藏隐藏文件

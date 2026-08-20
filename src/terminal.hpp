@@ -30,12 +30,15 @@ enum class KeyKind {
   CtrlC,
   WheelUp,   // 鼠标滚轮向上（启用鼠标追踪后）
   WheelDown, // 鼠标滚轮向下
+  MouseLeft, // 鼠标左键按下，坐标在 x/y（1-based 终端行列）
   Unknown,   // 识别但未使用的键（Delete、Tab、功能键、鼠标点击等）
 };
 
 struct KeyEvent {
   KeyKind kind = KeyKind::None;
   char32_t ch = 0; // kind==Char 时的 Unicode 码点
+  int x = 0;       // kind==MouseLeft 时的列（1-based）
+  int y = 0;       // kind==MouseLeft 时的行（1-based）
 };
 
 // 平台无关的终端抽象。
