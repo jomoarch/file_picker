@@ -181,7 +181,7 @@ std::string build_status(const std::string &left, const std::string &right,
 
 } // namespace
 
-Renderer::EntryRegion Renderer::middle_region(Size size) const {
+Renderer::ColumnsRegion Renderer::columns_region(Size size) const {
   int cols = std::max(size.cols, 8);
   int rows = std::max(size.rows, 5);
   int side = 0, mid = 0;
@@ -189,13 +189,12 @@ Renderer::EntryRegion Renderer::middle_region(Size size) const {
   int entry_rows = rows - 4;
   if (entry_rows < 1)
     entry_rows = 1;
-  EntryRegion r;
-  // 布局：左栏占 1..side，分隔符 "|" 在 side+1，中栏从 side+2 起占 mid 列
-  // 条目区行 3 .. 2+entry_rows（行 1=顶栏，2=栏标题，之后状态栏/路径行）
-  r.col1 = side + 2;
-  r.col2 = side + 1 + mid;
-  r.row1 = 3;
-  r.row2 = 2 + entry_rows;
+  ColumnsRegion r;
+  // 布局：左栏 1..side，分隔符 "|" 在 side+1，中栏 side+2..side+1+mid，
+  // 分隔符，右栏 side+3+mid..cols；条目区行 3 .. 2+entry_rows
+  r.left = {1, side, 3, 2 + entry_rows};
+  r.middle = {side + 2, side + 1 + mid, 3, 2 + entry_rows};
+  r.right = {side + 3 + mid, cols, 3, 2 + entry_rows};
   return r;
 }
 

@@ -41,6 +41,10 @@ public:
   bool enter_cursor();         // 进入光标所指目录；非目录/坏链接返回 false
   void toggle_hidden();        // 显示/隐藏隐藏文件
 
+  // ---- 栏滚动（鼠标在左/右栏滚轮直接滚动对应栏）----
+  void scroll_left(int delta);  // 滚动左栏；滚动后左栏不再强制高亮在视图内
+  void scroll_right(int delta); // 滚动右栏（光标子目录预览）
+
   // ---- 缓存 ----
   // 刷新钩子：清空目录缓存与光标记忆并重建
   void refresh_cache();
@@ -89,6 +93,8 @@ private:
 
   SelectionOptions opts_;
   Listing cur_, parent_, right_;
+  bool parent_follow_ = true; // 左栏是否跟随高亮（当前目录）滚动；手动滚动后关闭，
+                              // 重新装载父目录（导航/切换/刷新）时恢复
   std::unordered_set<std::string> sel_set_;
   std::vector<std::filesystem::path> sel_order_;
   std::unordered_map<std::string, size_t> sel_index_;

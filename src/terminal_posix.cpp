@@ -105,9 +105,9 @@ KeyEvent parse_byte(Terminal::Impl *im, unsigned char b) {
         int b = 0, x = 0, y = 0;
         std::sscanf(params.c_str() + 1, "%d;%d;%d", &b, &x, &y);
         if (b == 64)
-          return {KeyKind::WheelUp};
+          return {KeyKind::WheelUp, 0, x, y}; // 滚轮事件携带坐标（供按栏路由）
         if (b == 65)
-          return {KeyKind::WheelDown};
+          return {KeyKind::WheelDown, 0, x, y};
         if (b == 0)
           return {KeyKind::MouseLeft, 0, x, y}; // 左键按下（带 1-based 坐标）
         return {KeyKind::Unknown}; // 中键/右键/拖拽等其他鼠标事件忽略
@@ -194,9 +194,13 @@ KeyEvent parse_byte(Terminal::Impl *im, unsigned char b) {
       im->esc_state = 0;
       int btn = static_cast<int>(im->x10_buf[0]) - 32;
       if (btn == 64)
-        return {KeyKind::WheelUp};
+        return {KeyKind::WheelUp, 0,
+                static_cast<int>(im->x10_buf[1]) - 32,
+                static_cast<int>(im->x10_buf[2]) - 32};
       if (btn == 65)
-        return {KeyKind::WheelDown};
+        return {KeyKind::WheelDown, 0,
+                static_cast<int>(im->x10_buf[1]) - 32,
+                static_cast<int>(im->x10_buf[2]) - 32};
       if (btn == 0)
         return {KeyKind::MouseLeft, 0,
                 static_cast<int>(im->x10_buf[1]) - 32,

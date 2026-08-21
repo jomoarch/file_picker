@@ -364,8 +364,38 @@ void PickerState::clamp_scrolls(int entry_rows) {
       L.scroll = static_cast<size_t>(max_scroll);
   };
   fix(cur_, static_cast<long>(cur_.cursor));
-  fix(parent_, static_cast<long>(parent_.highlight));
-  right_.scroll = 0;
+  if (parent_follow_) {
+    fix(parent_, static_cast<long>(parent_.highlight));
+  } else {
+    // 左栏被手动滚动过：只夹紧合法范围，不强制高亮（当前目录）在视图内
+    if (parent_.entries.size() <= static_cast<size_t>(entry_rows))
+      parent_.scroll = 0;
+    else
+      parent_.scroll =
+          std::min(parent_.scroll, parent_.entries.size() -
+                                       static_cast<size_t>(entry_rows));
+  }
+  // 右栏：只夹紧合法范围（可被滚轮直接滚动；光标移动换目录时 relist_right 重置）
+  if (right_.entries.size() <= static_cast<size_t>(entry_rows))
+    right_.scroll = 0;
+  else
+    right_.scroll = std::min(
+        right_.scroll, right_.entries.size() - static_cast<size_t>(entry_rows));
+}
+
+void PickerState::scroll_left(int delta) {
+  if (parent_.entries.empty())
+    return;
+  long ns = static_cast<long>(parent_.scroll) + (delta < 0 ? -1 : 1);
+  parent_.scroll = ns < 0 ? 0 : static_cast<size_t>(ns);
+  parent_follow_ = false; // 手动滚动：不再强制左栏高亮在视图内
+}
+
+void PickerState::scroll_right(int delta) {
+  if (right_.entries.empty())
+    return;
+  long ns = static_cast<long>(right_.scroll) + (delta < 0 ? -1 : 1);
+  right_.scroll = ns < 0 ? 0 : static_cast<size_t>(ns);
 }
 
 void PickerState::rebuild_listings() {
@@ -404,6 +434,7 @@ void PickerState::relist_cur_and_parent() {
     }
     parent_.scroll = 0;
   }
+  parent_follow_ = true; // 父目录重新装载：左栏恢复跟随高亮
 }
 
 void PickerState::relist_right() {
@@ -416,11 +447,14 @@ void PickerState::relist_right() {
     right_.scroll = 0;
     return;
   }
+  fs::path old_dir = right_.dir;
+  size_t old_scroll = right_.scroll; // 缓存装载会覆盖 scroll，需显式恢复
   if (!load_listing(e->path, opts_.show_hidden, right_)) {
     right_ = scan_directory(e->path, opts_.show_hidden);
     store_listing(e->path, opts_.show_hidden, right_);
   }
-  right_.scroll = 0;
+  // 右栏目录未变（如定位到同一行）时保留手动滚动；换目录则重置
+  right_.scroll = (right_.dir == old_dir) ? old_scroll : 0;
 }
 
 bool PickerState::load_listing(const std::filesystem::path &dir,

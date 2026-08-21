@@ -219,21 +219,47 @@ SelectionResult pick_files(const SelectionOptions &user_opts) {
       case KeyKind::Backspace:
         state.go_parent();
         break;
-      case KeyKind::WheelUp: // 鼠标滚轮上/下：移动光标
-        state.move_cursor(-1);
+      case KeyKind::WheelUp:
+      case KeyKind::WheelDown: {
+        // 滚轮按栏路由：左栏滚左栏、右栏滚右栏、其余（含中栏）移动光标
+        int delta = ev.kind == KeyKind::WheelUp ? -1 : 1;
+        Renderer::ColumnsRegion rg = renderer.columns_region(last_size);
+        if (ev.x >= rg.left.col1 && ev.x <= rg.left.col2 && ev.y >= rg.left.row1 &&
+            ev.y <= rg.left.row2) {
+          state.scroll_left(delta);
+        } else if (ev.x >= rg.right.col1 && ev.x <= rg.right.col2 &&
+                   ev.y >= rg.right.row1 && ev.y <= rg.right.row2) {
+          state.scroll_right(delta);
+        } else {
+          state.move_cursor(delta);
+        }
         break;
-      case KeyKind::WheelDown:
-        state.move_cursor(1);
-        break;
+      }
       case KeyKind::MouseLeft: {
-        // 鼠标左键：仅中栏条目区内的点击用于定位光标
-        Renderer::EntryRegion rg = renderer.middle_region(last_size);
-        if (ev.x >= rg.col1 && ev.x <= rg.col2 && ev.y >= rg.row1 &&
-            ev.y <= rg.row2) {
+        // 鼠标左键：左栏跳到祖先、右栏进入子目录、中栏定位光标（均定位到点击行）
+        Renderer::ColumnsRegion rg = renderer.columns_region(last_size);
+        if (ev.y < rg.left.row1 || ev.y > rg.left.row2)
+          break; // 标题/状态栏等非条目区点击忽略
+        if (ev.x >= rg.left.col1 && ev.x <= rg.left.col2) {
+          // 左栏：若当前目录还有祖先则跳转，偏移定位到点击行
+          if (state.parent_listing().dir != state.current_dir()) {
+            size_t target =
+                state.parent_listing().scroll +
+                static_cast<size_t>(ev.y - rg.left.row1);
+            state.go_parent();
+            state.jump_cursor(target);
+          }
+        } else if (ev.x >= rg.middle.col1 && ev.x <= rg.middle.col2) {
           size_t target =
               state.current_listing().scroll +
-              static_cast<size_t>(ev.y - rg.row1); // 点击行 -> 条目索引（含滚动偏移）
+              static_cast<size_t>(ev.y - rg.middle.row1);
           state.jump_cursor(target);
+        } else if (ev.x >= rg.right.col1 && ev.x <= rg.right.col2) {
+          // 右栏：若中栏光标所指是文件夹则进入子目录，偏移定位到点击行
+          size_t target = state.right_listing().scroll +
+                          static_cast<size_t>(ev.y - rg.right.row1);
+          if (state.enter_cursor())
+            state.jump_cursor(target);
         }
         break;
       }
