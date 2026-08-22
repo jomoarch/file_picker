@@ -32,14 +32,7 @@ SelectionResult pick_files(const SelectionOptions &user_opts) {
                  ec ? ec.message().c_str() : "not a directory");
     return {false, {}};
   }
-  if (!opts.allow_files && !opts.allow_directories) {
-    std::fprintf(
-        stderr,
-        "file_picker: allow_files and allow_directories are both false; "
-        "nothing can be selected\n");
-    return {false, {}};
-  }
-
+  // filter 为空时全部（除链接）可选，无需额外校验
   Terminal term;
   if (!term.init()) {
     std::fprintf(stderr, "file_picker: cannot enter interactive mode "

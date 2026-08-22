@@ -8,7 +8,8 @@
 // 用法示例：
 //   SelectionOptions opts;
 //   opts.initial_path = "/home/user";
-//   opts.mode = SelectionMode::MULTI_FILE;
+//   opts.mode = SelectionMode::MULTI; // 多选
+//   opts.filter = select_file_only;   // 只允许选择普通文件（目录/链接不可选）
 //   SelectionResult result = pick_files(opts);
 //   if (result.ok) {
 //     for (const auto &p : result.paths) { /* ... */ }
@@ -38,31 +39,48 @@
 #define FILE_PICKER_HPP
 
 #include <filesystem>
+#include <functional>
+#include <system_error>
 #include <vector>
 
+// 选择模式：只区分单/多选；可选条目的类型由 filter（或 allow_*）决定
 enum class SelectionMode {
-  SINGLE_FILE,      // 单选文件
-  MULTI_FILE,       // 多选文件
-  SINGLE_DIRECTORY, // 单选目录
-  MULTI_DIRECTORY,  // 多选目录
+  SINGLE, // 单选：同一时刻最多保留一个选中项
+  MULTI,  // 多选：不限制数量
 };
+
+// 常用选择过滤器模板（符号链接一律不可选）：
+
+// 只选普通文件（目录不可选）
+inline bool select_file_only(const std::filesystem::path &p) {
+  std::error_code ec;
+  std::filesystem::file_status ss = std::filesystem::symlink_status(p, ec);
+  if (ec || std::filesystem::is_symlink(ss))
+    return false;
+  return std::filesystem::is_regular_file(ss);
+}
+
+// 只选目录（文件不可选）
+inline bool select_directory_only(const std::filesystem::path &p) {
+  std::error_code ec;
+  std::filesystem::file_status ss = std::filesystem::symlink_status(p, ec);
+  if (ec || std::filesystem::is_symlink(ss))
+    return false;
+  return std::filesystem::is_directory(ss);
+}
 
 struct SelectionOptions {
   std::filesystem::path initial_path; // 初始目录；为空时使用当前工作目录
 
-  // mode 决定“可选条目的类型”与“单/多选”：
-  //   *_FILE 模式只能选文件，*_DIRECTORY 模式只能选目录
-  //   SINGLE_* 模式同时最多保留一个选中项，MULTI_* 不限制数量
-  SelectionMode mode = SelectionMode::MULTI_FILE;
+  // 选择过滤器：决定某个条目是否可选中（true=可选）。
+  // 未设置时除符号链接外全部可选；设置后只由过滤器决定，
+  // 过滤器不允许的条目一律显示为灰色且不可选中。
+  // 符号链接无论过滤器如何都不可选中；导航（进入目录）不受过滤器限制。
+  std::function<bool(const std::filesystem::path &)> filter;
 
-  // allow_* 是比 mode 更细粒度的开关：条目类型必须先通过 mode
-  // 再通过对应的 allow_* 才会可选中（即 allow_* 只会进一步限制）
-  // 例如 mode=MULTI_FILE 且 allow_directories=true 时，目录仍不可选中
-  // （因为 mode 不允许目录）；而 mode=MULTI_DIRECTORY 且
-  // allow_directories=false 时，目录被 allow_*
-  // 禁止。导航（进入目录）不受这些开关限制
-  bool allow_files = true;
-  bool allow_directories = true;
+  // 单选/多选（单选模式同时最多保留一个选中项）
+  SelectionMode mode = SelectionMode::MULTI;
+
   bool show_hidden = false;
 
   // 初始选中路径。单选模式只保留第一个；无效/不可选的路径被忽略

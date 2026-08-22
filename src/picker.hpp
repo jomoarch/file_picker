@@ -59,8 +59,8 @@ public:
   const Listing &parent_listing() const { return parent_; }
   const Listing &right_listing() const { return right_; }
   const Entry *current_entry() const;
-  size_t selection_count() const { return sel_order_.size(); }
-  bool has_selection() const { return !sel_order_.empty(); }
+  size_t selection_count() const { return sel_set_.size(); }
+  bool has_selection() const { return !sel_set_.empty(); }
   bool is_selected(const std::string &key) const; // 用 Entry::key 预计算键查询
   bool selectable(const Entry &e) const; // 类型 + mode + allow_* 综合判定
   std::vector<std::filesystem::path>
@@ -80,8 +80,6 @@ private:
   void seed_ancestors(const std::filesystem::path &start);
   void clear_selection();
   bool is_single_mode() const;
-  bool mode_allows_dir() const;
-  bool mode_allows_file() const;
   static std::string path_key(const std::filesystem::path &p);
 
   // 静态目录缓存：key = show_hidden 标记 + 规范化路径。
@@ -95,9 +93,8 @@ private:
   Listing cur_, parent_, right_;
   bool parent_follow_ = true; // 左栏是否跟随高亮（当前目录）滚动；手动滚动后关闭，
                               // 重新装载父目录（导航/切换/刷新）时恢复
-  std::unordered_set<std::string> sel_set_;
-  std::vector<std::filesystem::path> sel_order_;
-  std::unordered_map<std::string, size_t> sel_index_;
+  std::unordered_set<std::string> sel_set_; // 选中集合（key=规范化 UTF-8 路径）
+  // 注意：不保留选中顺序；selected_paths() 从 key 反解路径
   std::unordered_map<std::string, CursorMem>
       cursor_mem_; // 每目录两个视图的光标偏移
   std::unordered_map<std::string, Listing> listing_cache_; // 静态目录缓存

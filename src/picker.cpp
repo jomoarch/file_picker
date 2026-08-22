@@ -72,11 +72,9 @@ PickerState::PickerState(const SelectionOptions &opts) : opts_(opts) {
     std::string k = path_key(ap);
     if (sel_set_.count(k))
       continue;
-    if (is_single_mode() && !sel_order_.empty())
+    if (is_single_mode() && !sel_set_.empty())
       continue;
     sel_set_.insert(k);
-    sel_index_[k] = sel_order_.size();
-    sel_order_.push_back(ap);
   }
 }
 
@@ -293,21 +291,12 @@ void PickerState::toggle_cursor_selection() {
     return;
 
   std::string k = e->key;
-  auto it = sel_set_.find(k);
-  if (it != sel_set_.end()) {
-    sel_set_.erase(it);
-    size_t idx = sel_index_[k];
-    sel_order_.erase(sel_order_.begin() + static_cast<long>(idx));
-    sel_index_.erase(k);
-    for (size_t i = idx; i < sel_order_.size(); ++i) {
-      sel_index_[path_key(sel_order_[i])] = i;
-    }
+  if (sel_set_.count(k)) {
+    sel_set_.erase(k);
   } else {
     if (is_single_mode())
       clear_selection();
     sel_set_.insert(k);
-    sel_index_[k] = sel_order_.size();
-    sel_order_.push_back(fs::absolute(e->path).lexically_normal());
   }
 }
 
@@ -322,27 +311,27 @@ bool PickerState::is_selected(const std::string &key) const {
 }
 
 bool PickerState::selectable(const Entry &e) const {
-  if (e.is_link)
-    return false;
-  if (e.is_dir)
-    return mode_allows_dir() && opts_.allow_directories;
-  return mode_allows_file() && opts_.allow_files;
+  if (opts_.filter)
+    return opts_.filter(
+        e.path); // 只由过滤器决定；filter 不允许的一律不可选（灰色）
+  return true;   // 未设 filter：除链接外全部可选
 }
 
 std::vector<std::filesystem::path> PickerState::selected_paths() const {
-  return sel_order_;
+  // 不保留选中顺序：从 sel_set_ 的 key 反解回规范化绝对路径
+  std::vector<std::filesystem::path> out;
+  out.reserve(sel_set_.size());
+  for (const auto &k : sel_set_)
+    out.push_back(path_from_utf8(k));
+  return out;
 }
 
 std::string PickerState::mode_name() const {
   switch (opts_.mode) {
-  case SelectionMode::SINGLE_FILE:
-    return "SINGLE_FILE";
-  case SelectionMode::MULTI_FILE:
-    return "MULTI_FILE";
-  case SelectionMode::SINGLE_DIRECTORY:
-    return "SINGLE_DIRECTORY";
-  case SelectionMode::MULTI_DIRECTORY:
-    return "MULTI_DIRECTORY";
+  case SelectionMode::SINGLE:
+    return "SINGLE";
+  case SelectionMode::MULTI:
+    return "MULTI";
   }
   return "?";
 }
@@ -372,10 +361,11 @@ void PickerState::clamp_scrolls(int entry_rows) {
       parent_.scroll = 0;
     else
       parent_.scroll =
-          std::min(parent_.scroll, parent_.entries.size() -
-                                       static_cast<size_t>(entry_rows));
+          std::min(parent_.scroll,
+                   parent_.entries.size() - static_cast<size_t>(entry_rows));
   }
-  // 右栏：只夹紧合法范围（可被滚轮直接滚动；光标移动换目录时 relist_right 重置）
+  // 右栏：只夹紧合法范围（可被滚轮直接滚动；光标移动换目录时 relist_right
+  // 重置）
   if (right_.entries.size() <= static_cast<size_t>(entry_rows))
     right_.scroll = 0;
   else
@@ -550,25 +540,10 @@ void PickerState::restore_cursor(const std::filesystem::path &dir) {
   cur_.cursor = cur_.entries.empty() ? 0 : std::min(c, cur_.entries.size() - 1);
 }
 
-void PickerState::clear_selection() {
-  sel_set_.clear();
-  sel_order_.clear();
-  sel_index_.clear();
-}
+void PickerState::clear_selection() { sel_set_.clear(); }
 
 bool PickerState::is_single_mode() const {
-  return opts_.mode == SelectionMode::SINGLE_FILE ||
-         opts_.mode == SelectionMode::SINGLE_DIRECTORY;
-}
-
-bool PickerState::mode_allows_dir() const {
-  return opts_.mode == SelectionMode::SINGLE_DIRECTORY ||
-         opts_.mode == SelectionMode::MULTI_DIRECTORY;
-}
-
-bool PickerState::mode_allows_file() const {
-  return opts_.mode == SelectionMode::SINGLE_FILE ||
-         opts_.mode == SelectionMode::MULTI_FILE;
+  return opts_.mode == SelectionMode::SINGLE;
 }
 
 std::string PickerState::path_key(const std::filesystem::path &p) {

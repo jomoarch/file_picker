@@ -31,9 +31,9 @@
   栏内显示 (Empty) / (Error) 表示空目录或读取失败
 
 【模式】
-  SINGLE_FILE          单选文件（同一时刻最多选中一个）
-  MULTI_FILE           多选文件（默认）
-  SINGLE_DIRECTORY     单选目录
-  MULTI_DIRECTORY      多选目录
-  allow_files / allow_directories 可进一步限制可选类型
+  SINGLE               单选（同一时刻最多选中一个）
+  MULTI                多选（默认）
+  filter 决定可选条目：select_file_only 只选文件、
+  select_directory_only 只选目录；不被 filter 允许的条目显示为灰色且不可选中
+  （未设 filter 时除符号链接外全部可选；链接不可选中但可进入）
   （导航不受模式限制，目录始终可以进入）
